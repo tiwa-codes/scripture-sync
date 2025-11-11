@@ -12,6 +12,7 @@ A powerful system that listens to audio (microphone or PA system), transcribes s
   - Exact phrase matching
   - Fuzzy matching with RapidFuzz
   - Semantic similarity using sentence embeddings + FAISS
+  - Scripture reference parsing (e.g., `Genesis 2:19`, `John 3:16 NIV`)
 - ⚡ **Low Latency** - Target <2s from speech to verse display
 - 📺 **Dual Display Mode**:
   - Dashboard for operators (search, manual selection, lock controls)
@@ -129,7 +130,7 @@ sudo apt-get install -y \
 ### Dashboard Controls
 
 1. **View Current Verse** - See the matched verse with confidence score and latency
-2. **Search Verses** - Manually search for specific verses
+2. **Search Verses** - Manually search by text or reference (try `Genesis 2:19` or `John 3:16 NIV`)
 3. **Quick Select** - Choose from a list of common verses
 4. **Lock Control** - Lock the current verse to prevent auto-updates
 5. **Test Transcription** - Simulate audio input for testing
@@ -221,7 +222,7 @@ npm test
 
 ### Manual Testing
 1. Use the "Test Transcription" button in the dashboard
-2. Try search queries: "God so loved the world", "Lord is my shepherd"
+2. Try search queries: "God so loved the world", "Lord is my shepherd", `Genesis 2:19 NIV`
 3. Test WebSocket by opening multiple browser tabs
 4. Test lock functionality
 
@@ -258,6 +259,8 @@ The sample implementation includes a few verses for testing. To add the complete
 2. Place files in `data/kjv.json` and `data/niv.json`
 3. Use the import function:
 
+> The loader accepts either the original `{"books": [...]}` layout or nested dictionaries like `{"Genesis": {"1": {"1": "In the beginning..."}}}` – mixing formats is fine.
+
 ```python
 from app.bible_data import load_full_bible_from_json
 
@@ -267,6 +270,14 @@ await load_full_bible_from_json(
     "data/kjv.json", 
     "data/niv.json"
 )
+```
+
+Or rebuild the SQLite database directly:
+
+```bash
+cd backend
+source venv/bin/activate
+python ../scripts/import-bible.py data/kjv.json data/niv.json
 ```
 
 ## 🤝 Contributing

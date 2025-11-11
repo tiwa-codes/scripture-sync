@@ -46,10 +46,22 @@ Open your web browser:
 
 1. Click "Test Transcription" button in dashboard
 2. Watch as the verse appears (John 3:16)
-3. Try searching: "Lord is my shepherd"
+3. Try searching: "Lord is my shepherd" or `Genesis 2:19 NIV`
 4. Click any verse in the "Quick Select" list
 5. Open projection view in a new window
 6. Test the lock feature
+
+## 📚 Load Full Bible Data (Optional)
+
+1. Place your Bible dumps at `data/kjv.json` and `data/niv.json` (Docker) or `backend/data/*.json` (local dev).
+2. The importer accepts either the original `{"books": [...]}` layout or nested dictionaries such as `{"Genesis": {"1": {"1": "..."}}}`.
+3. Rebuild the SQLite database when needed:
+   ```bash
+   cd backend
+   source venv/bin/activate
+   python ../scripts/import-bible.py data/kjv.json data/niv.json
+   ```
+
 
 ## 🎯 Common Use Cases
 
