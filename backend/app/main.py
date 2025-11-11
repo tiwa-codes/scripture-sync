@@ -100,9 +100,9 @@ async def on_transcription(text: str):
     
     async for session in get_session():
         result = await verse_matcher.find_best_match(
-            text, 
-            session, 
-            min_score=settings.min_match_score
+            text,
+            session,
+            min_score=settings.min_match_score,
         )
         
         if result:
@@ -270,7 +270,12 @@ async def search_verses(
     session: AsyncSession = Depends(get_session)
 ):
     """Search for verses matching a query"""
-    result = await verse_matcher.find_best_match(q, session, min_score=0.3)
+    result = await verse_matcher.find_best_match(
+        q,
+        session,
+        min_score=0.3,
+        version=version,
+    )
     
     if not result:
         return {"matches": []}

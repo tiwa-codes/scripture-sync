@@ -4,6 +4,7 @@ Loads KJV and NIV Bible text into the database
 """
 import json
 import re
+from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import Verse
@@ -53,6 +54,45 @@ SAMPLE_BIBLE_DATA = {
     }
 }
 
+
+def iterate_bible_entries(data):
+    """Yield 4-tuples of (book, chapter, verse, text) from supported JSON formats"""
+    if isinstance(data, dict) and 'books' in data:
+        for book in data.get('books', []):
+            book_name = book.get('name')
+            if not book_name:
+                continue
+            for chapter in book.get('chapters', []):
+                chapter_num = chapter.get('chapter')
+                if chapter_num is None:
+                    continue
+                for verse_data in chapter.get('verses', []):
+                    verse_num = verse_data.get('verse')
+                    text = verse_data.get('text')
+                    if verse_num is None or text is None:
+                        continue
+                    yield book_name, int(chapter_num), int(verse_num), str(text)
+    elif isinstance(data, dict):
+        for book_name, chapters in data.items():
+            if not isinstance(chapters, dict):
+                continue
+            for chapter_key, verses in chapters.items():
+                try:
+                    chapter_num = int(chapter_key)
+                except (TypeError, ValueError):
+                    continue
+                if not isinstance(verses, dict):
+                    continue
+                for verse_key, verse_text in verses.items():
+                    try:
+                        verse_num = int(verse_key)
+                    except (TypeError, ValueError):
+                        continue
+                    if verse_text is None:
+                        continue
+                    yield book_name, chapter_num, verse_num, str(verse_text)
+
+
 def normalize_text(text: str) -> str:
     """Normalize text for searching"""
     text = text.lower()
@@ -66,7 +106,30 @@ async def load_bible_data(session: AsyncSession):
     result = await session.execute(select(Verse).limit(1))
     if result.scalar_one_or_none():
         return  # Data already loaded
-    
+
+    # Attempt to load real data from JSON dump if available
+    backend_root = Path(__file__).resolve().parent.parent
+    candidate_dirs = [backend_root / "data", backend_root.parent / "data"]
+
+    def find_file(filename: str) -> str:
+        for directory in candidate_dirs:
+            candidate = directory / filename
+            if candidate.exists():
+                return str(candidate)
+        return ""
+
+    kjv_path = find_file("kjv.json")
+    niv_path = find_file("niv.json")
+
+    if kjv_path or niv_path:
+        await load_full_bible_from_json(session, kjv_path, niv_path)
+
+        # Re-check after attempting to import full data
+        result = await session.execute(select(Verse).limit(1))
+        if result.scalar_one_or_none():
+            return
+
+    # Fall back to bundled sample data
     embedding_index = 0
     for version, books in SAMPLE_BIBLE_DATA.items():
         for book, chapters in books.items():
@@ -83,7 +146,7 @@ async def load_bible_data(session: AsyncSession):
                     )
                     session.add(verse)
                     embedding_index += 1
-    
+
     await session.commit()
 
 async def load_full_bible_from_json(session: AsyncSession, kjv_path: str, niv_path: str):
@@ -116,25 +179,18 @@ async def load_full_bible_from_json(session: AsyncSession, kjv_path: str, niv_pa
             
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        
-        for book in data.get('books', []):
-            book_name = book['name']
-            for chapter in book.get('chapters', []):
-                chapter_num = chapter['chapter']
-                for verse_data in chapter.get('verses', []):
-                    verse_num = verse_data['verse']
-                    text = verse_data['text']
-                    
-                    verse = Verse(
-                        version=version,
-                        book=book_name,
-                        chapter=chapter_num,
-                        verse=verse_num,
-                        text=text,
-                        search_text=normalize_text(text),
-                        embedding_index=embedding_index
-                    )
-                    session.add(verse)
-                    embedding_index += 1
+
+        for book_name, chapter_num, verse_num, text in iterate_bible_entries(data):
+            verse = Verse(
+                version=version,
+                book=book_name,
+                chapter=chapter_num,
+                verse=verse_num,
+                text=text,
+                search_text=normalize_text(text),
+                embedding_index=embedding_index
+            )
+            session.add(verse)
+            embedding_index += 1
         
         await session.commit()

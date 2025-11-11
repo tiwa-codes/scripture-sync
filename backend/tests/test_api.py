@@ -50,6 +50,18 @@ def test_search_endpoint(client):
     assert "latency_ms" in data
 
 
+def test_search_reference_query(client):
+    """Ensure scripture references resolve directly"""
+    response = client.get("/search?q=Genesis+1:1")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["matches"], "Expected at least one reference match"
+    match = data["matches"][0]
+    assert match["book"] == "Genesis"
+    assert match["chapter"] == 1
+    assert match["verse"] == 1
+
+
 def test_lock_endpoint(client):
     """Test lock endpoint"""
     response = client.post(

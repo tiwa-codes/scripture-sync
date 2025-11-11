@@ -11,9 +11,11 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
-from app.database import engine, Base, Verse
+# Pylance cannot resolve runtime path injection; ignore import warning for scripts
+from app.database import engine, Base, Verse  # type: ignore[import]
+from app.bible_data import iterate_bible_entries, normalize_text  # type: ignore[import]
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 async def import_bible(kjv_path: str, niv_path: str):
     """Import Bible data from JSON files"""
@@ -33,7 +35,7 @@ async def import_bible(kjv_path: str, niv_path: str):
                 return
             
             # Clear existing data
-            await session.execute("DELETE FROM verses")
+            await session.execute(text("DELETE FROM verses"))
             await session.commit()
             print("✅ Existing data cleared")
         
@@ -51,39 +53,26 @@ async def import_bible(kjv_path: str, niv_path: str):
                 data = json.load(f)
             
             version_verses = 0
-            for book in data.get('books', []):
-                book_name = book['name']
+            for book_name, chapter_num, verse_num, verse_text in iterate_bible_entries(data):
                 print(f"  Loading {book_name}...", end='\r')
-                
-                for chapter in book.get('chapters', []):
-                    chapter_num = chapter['chapter']
-                    
-                    for verse_data in chapter.get('verses', []):
-                        verse_num = verse_data['verse']
-                        text = verse_data['text']
-                        
-                        # Normalize text for searching
-                        search_text = text.lower()
-                        search_text = ''.join(c if c.isalnum() or c.isspace() else ' ' for c in search_text)
-                        search_text = ' '.join(search_text.split())
-                        
-                        verse = Verse(
-                            version=version,
-                            book=book_name,
-                            chapter=chapter_num,
-                            verse=verse_num,
-                            text=text,
-                            search_text=search_text,
-                            embedding_index=embedding_index
-                        )
-                        session.add(verse)
-                        
-                        embedding_index += 1
-                        version_verses += 1
-                        
-                        # Commit in batches
-                        if version_verses % 100 == 0:
-                            await session.commit()
+
+                verse = Verse(
+                    version=version,
+                    book=book_name,
+                    chapter=chapter_num,
+                    verse=verse_num,
+                    text=verse_text,
+                    search_text=normalize_text(verse_text),
+                    embedding_index=embedding_index
+                )
+                session.add(verse)
+
+                embedding_index += 1
+                version_verses += 1
+
+                # Commit in batches
+                if version_verses % 500 == 0:
+                    await session.commit()
             
             await session.commit()
             total_verses += version_verses
